@@ -1,0 +1,143 @@
+name: Build Windows Executable (Anti-Virus Optimized)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+    
+    - name: Create version info file
+      run: |
+        $versionInfo = @"
+        VSVersionInfo(
+          ffi=FixedFileInfo(
+            filevers=(1, 0, 0, 0),
+            prodvers=(1, 0, 0, 0),
+            mask=0x3f,
+            flags=0x0,
+            OS=0x40004,
+            fileType=0x1,
+            subtype=0x0,
+            date=(0, 0)
+          ),
+          kids=[
+            StringFileInfo(
+              [
+              StringTable(
+                u'040904B0',
+                [StringStruct(u'CompanyName', u'Personal Developer'),
+                StringStruct(u'FileDescription', u'Markdown Chinese Format Converter'),
+                StringStruct(u'FileVersion', u'1.0.0.0'),
+                StringStruct(u'InternalName', u'MarkdownConverter'),
+                StringStruct(u'LegalCopyright', u'Copyright 2025'),
+                StringStruct(u'OriginalFilename', u'MarkdownConverter.exe'),
+                StringStruct(u'ProductName', u'Markdown Converter'),
+                StringStruct(u'ProductVersion', u'1.0.0')])
+              ]),
+            VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+          ]
+        )
+        "@
+        $versionInfo | Out-File -FilePath "version_info.txt" -Encoding UTF8
+
+    - name: Build executable with optimized parameters
+      run: |
+        pyinstaller `
+          --onefile `
+          --windowed `
+          --name=MarkdownConverter `
+          --version-file=version_info.txt `
+          --distpath=dist `
+          --workpath=build `
+          --specpath=. `
+          --clean `
+          --noupx `
+          --exclude-module=PIL `
+          --exclude-module=matplotlib `
+          --exclude-module=numpy `
+          --exclude-module=scipy `
+          --exclude-module=pandas `
+          markdown_gui_custom.py
+
+    - name: Create README for users
+      run: |
+        $readme = @"
+        Markdown中文格式转换器 v1.0
+        ============================
+        
+        杀毒软件误报解决方案：
+        
+        如果360或其他杀毒软件提示风险，请：
+        1. 选择"允许运行"或"信任此文件"
+        2. 将程序添加到杀毒软件白名单
+        
+        360安全卫士操作方法：
+        - 打开360安全卫士
+        - 点击"木马防火墙" → "信任区"
+        - 点击"添加文件"，选择本程序
+        
+        程序说明：
+        - 这是一个纯粹的文档格式转换工具
+        - 使用Python + Tkinter开发
+        - 不连接网络，不收集信息
+        - 经过优化编译，减少误报
+        
+        使用方法：
+        1. 双击 MarkdownConverter.exe 启动
+        2. 在左侧输入要转换的文本
+        3. 在"格式规则"页面设置格式
+        4. 查看转换结果并复制
+        
+        版本信息：
+        - 版本：v1.0 优化版
+        - 编译日期：$(Get-Date -Format 'yyyy-MM-dd')
+        - 编译器：PyInstaller（优化参数）
+        
+        如有问题，请联系开发者。
+        "@
+        $readme | Out-File -FilePath "dist/使用说明.txt" -Encoding UTF8
+
+    - name: Verify and package
+      run: |
+        if (Test-Path "dist/MarkdownConverter.exe") {
+          $size = (Get-Item "dist/MarkdownConverter.exe").Length / 1MB
+          Write-Host "✅ 构建成功！"
+          Write-Host "📊 文件大小: $([math]::Round($size, 2)) MB"
+          
+          # 创建zip包
+          Compress-Archive -Path "dist/*" -DestinationPath "MarkdownConverter_Optimized_v1.0.zip"
+          Write-Host "📦 已创建分发包: MarkdownConverter_Optimized_v1.0.zip"
+        } else {
+          Write-Host "❌ 构建失败"
+          exit 1
+        }
+
+    - name: Upload optimized executable
+      uses: actions/upload-artifact@v3
+      with:
+        name: MarkdownConverter-Optimized
+        path: |
+          dist/MarkdownConverter.exe
+          dist/使用说明.txt
+          
+    - name: Upload distribution package
+      uses: actions/upload-artifact@v3
+      with:
+        name: MarkdownConverter-Distribution
+        path: MarkdownConverter_Optimized_v1.0.zip
