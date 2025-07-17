@@ -6,10 +6,11 @@ Markdown中文格式转换器 - 用户友好版（优化布局）
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, font
 import re
 import json
 import os
+import platform
 
 class MarkdownConverter:
     def __init__(self):
@@ -19,21 +20,21 @@ class MarkdownConverter:
         
         # 预定义的标题格式库
         self.title_patterns = {
-            # 输入格式的正则表达式
-            'markdown_h4': {'pattern': r'^####\s*(.+)$', 'name': '#### 标题'},
-            'markdown_h3': {'pattern': r'^###\s*(.+)$', 'name': '### 标题'},
-            'markdown_h2': {'pattern': r'^##\s*(.+)$', 'name': '## 标题'},
-            'markdown_h1': {'pattern': r'^#\s*(.+)$', 'name': '# 标题'},
+            # 输入格式的正则表达式，修改为严格匹配
+            'markdown_h4': {'pattern': r'^####\s+(.+)$', 'name': '#### 标题'},  # 严格匹配4个#
+            'markdown_h3': {'pattern': r'^###\s+(.+)$', 'name': '### 标题'},    # 严格匹配3个#
+            'markdown_h2': {'pattern': r'^##\s+(.+)$', 'name': '## 标题'},      # 严格匹配2个#
+            'markdown_h1': {'pattern': r'^#\s+(.+)$', 'name': '# 标题'},        # 严格匹配1个#
             'chinese_paren': {'pattern': r'^（([一二三四五六七八九十]+)）\s*(.+)$', 'name': '（一）标题'},
             'chinese_dot': {'pattern': r'^([一二三四五六七八九十]+)、\s*(.+)$', 'name': '一、标题'},
             'number_paren': {'pattern': r'^\((\d+)\)\s*(.+)$', 'name': '(1)标题'},
             'number_dot': {'pattern': r'^(\d+)、\s*(.+)$', 'name': '1、标题'},
-            'number_period': {'pattern': r'^(\d+)\.\s*(.+)$', 'name': '1. 标题'},
+            'number_period': {'pattern': r'^(\d+)\.\s+(.+)$', 'name': '1. 标题'},
             'letter_paren': {'pattern': r'^\(([A-Z])\)\s*(.+)$', 'name': '(A)标题'},
-            'letter_period': {'pattern': r'^([A-Z])\.\s*(.+)$', 'name': 'A. 标题'},
+            'letter_period': {'pattern': r'^([A-Z])\.\s+(.+)$', 'name': 'A. 标题'},
             'letter_paren_lower': {'pattern': r'^\(([a-z])\)\s*(.+)$', 'name': '(a)标题'},
-            'dash': {'pattern': r'^-\s*(.+)$', 'name': '- 标题'},
-            'asterisk': {'pattern': r'^\*\s*(.+)$', 'name': '* 标题'},
+            'dash': {'pattern': r'^-\s+(.+)$', 'name': '- 标题'},
+            'asterisk': {'pattern': r'^\*\s+(.+)$', 'name': '* 标题'},
             'roman_paren': {'pattern': r'^（([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)）\s*(.+)$', 'name': '（Ⅰ）标题'},
             'roman_dot': {'pattern': r'^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)、\s*(.+)$', 'name': 'Ⅰ、标题'},
             'plain_text': {'pattern': r'^(.+)$', 'name': '普通文本（匹配所有）'}
@@ -48,96 +49,58 @@ class MarkdownConverter:
         }
     
     def clean_existing_title_numbers(self, title):
-        """清理标题中已有的编号"""
+        """清理标题中已有的编号，包括各种常见编号格式"""
         patterns = [
-            r'^[一二三四五六七八九十]+、\s*',
-            r'^\d+、\s*',
-            r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+、\s*',
-            r'^（[一二三四五六七八九十]+）\s*',
-            r'^\(\d+\)\s*',
-            r'^\([A-Z]\)\s*',
-            r'^\d+\.\s+',
-            r'^[A-Z]\.\s+',
-            r'^[一二三四五六七八九十]+\.\s+',
-            r'^\([a-z]\)\s*',
-            r'^[-*]\s*',
-            r'^\w+\)\s*',
+            r'^[#*\s]*[一二三四五六七八九十]+[、.．]\s*',           # 中文数字+、/./．
+            r'^[#*\s]*[0-9]+[、.．]\s*',                        # 数字+、/./．
+            r'^[#*\s]*[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+[、.．]\s*',              # 罗马数字+、/./．
+            r'^[#*\s]*[（(][一二三四五六七八九十0-9ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩa-zA-Z]+[)）]\s*', # 括号编号
+            r'^[#*\s]*[A-Za-z][.．]\s*',                        # 字母+点
+            r'^[#*\s]*[一二三四五六七八九十]+\s+',                # 中文数字+空格
+            r'^[#*\s]*[0-9]+\s+',                               # 数字+空格
+            r'^[#*\s]*[A-Za-z]+\s+',                            # 字母+空格
         ]
-        
         for pattern in patterns:
             title = re.sub(pattern, '', title)
-        
         return title.strip()
     
     def clean_markdown_symbols(self, text):
         """清除Markdown符号，保留文本内容"""
         # 清除标题符号 (# 开头)
         text = re.sub(r'^#+\s*', '', text)
-        
+        # 清除分隔线 (--- 或 ***)
+        text = re.sub(r'^\s*[-*]{3,}\s*$', '', text)
         # 清除列表符号 (- * + 开头)
-        text = re.sub(r'^[-*+]\s+', '', text)
-        
+        text = re.sub(r'^[-*+]+\s+', '', text)
         # 清除数字列表 (1. 2. 等开头)
         text = re.sub(r'^\d+\.\s+', '', text)
-        
         # 清除粗体和斜体标记 (** * __ _)
         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # 粗体 **text**
         text = re.sub(r'\*(.*?)\*', r'\1', text)      # 斜体 *text*
         text = re.sub(r'__(.*?)__', r'\1', text)      # 粗体 __text__
         text = re.sub(r'_(.*?)_', r'\1', text)        # 斜体 _text_
-        
         # 清除反引号代码块 (`code`)
         text = re.sub(r'`(.*?)`', r'\1', text)
-        
         # 清除链接 [text](url)
         text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
-        
         # 清除图片 ![alt](url)
         text = re.sub(r'!\[(.*?)\]\(.*?\)', r'\1', text)
-        
-        # 清除水平线 (--- 或 ***)
-        text = re.sub(r'^[-*]{3,}\s*$', '', text)
-        
         # 清除引用符号 (> 开头)
         text = re.sub(r'^>\s+', '', text)
-        
         # 清除三个井号标记 (### 开头)
         text = re.sub(r'^###\s+', '', text)
-        
         # 清除两个星号标记 (**开头或结尾)
         text = re.sub(r'^\*\*', '', text)
         text = re.sub(r'\*\*$', '', text)
-        
-        # 清除特定的Markdown标记，如示例中的 "### 1. **"
-        text = re.sub(r'^###\s+\d+\.\s+\*\*', '', text)
-        
         # 清除行内的星号标记
         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-        
-        # 清除行末的星号标记 - 修正：确保能处理文本末尾的星号
+        # 清除行末的星号标记
         text = re.sub(r'\*\*\s*$', '', text)
         text = re.sub(r'\*$', '', text)  # 清除单个星号结尾
-        
-        # 清除特定格式，如 "### 4. **地方配套政策（示例）**"
-        text = re.sub(r'^###\s+\d+\.\s+\*\*(.*?)\*\*', r'\1', text)
-        
-        # 清除特定格式，如 "**发布机构**："
-        text = re.sub(r'\*\*(.*?)\*\*：', r'\1：', text)
-        
-        # 清除特定格式，如 "**主要内容**："
-        text = re.sub(r'\*\*(.*?)\*\*：', r'\1：', text)
-        
-        # 清除特定格式，如 "**政策核心目标**"
-        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-        
-        # 清除特定格式，如 "**技术升级**："
-        text = re.sub(r'\*\*(.*?)\*\*：', r'\1：', text)
-        
-        # 最后再次检查，确保所有星号都被清除
-        text = re.sub(r'\*+', '', text)
-        
-        return text
-
+        # 清除所有剩余的#和*
+        text = re.sub(r'[#*]+', '', text)
+        return text.strip()
+    
     def get_chinese_number(self, num):
         if num <= 10:
             return self.chinese_numbers[num - 1]
@@ -217,75 +180,73 @@ class MarkdownConverter:
         """转换整个文本"""
         lines = text.split('\n')
         converted_lines = []
-        
         self.reset_counters()
-        
-        # 用于跟踪当前段落
         current_paragraph = []
-        
-        # 用于跟踪列表项的缩进级别
         list_indent_level = 0
         in_list = False
-        
-        # 用于跟踪标题行
         last_line_was_title = False
+        
+        # 创建一个按特定规则排序的规则列表
+        # 1. 优先处理markdown标题，按#数量从多到少排序（即从低级别到高级别）
+        # 2. 然后处理其他格式
+        sorted_rules = []
+        markdown_rules = []
+        other_rules = []
+        
+        for level_name, pattern_key in input_rules.items():
+            if pattern_key and pattern_key in self.title_patterns:
+                if pattern_key.startswith('markdown_'):
+                    # 提取#的数量，用于排序
+                    hash_count = pattern_key.count('h')
+                    markdown_rules.append((level_name, pattern_key, hash_count))
+                else:
+                    other_rules.append((level_name, pattern_key))
+        
+        # 对markdown标题规则按#数量从多到少排序（即从低级别到高级别）
+        markdown_rules.sort(key=lambda x: -x[2])  # 负号表示降序
+        
+        # 合并排序后的规则
+        for rule in markdown_rules:
+            sorted_rules.append((rule[0], rule[1]))
+        sorted_rules.extend(other_rules)
         
         for i, line in enumerate(lines):
             original_line = line.strip()
-            
+            # 跳过分隔线
+            if re.match(r'^\s*[-*]{3,}\s*$', original_line):
+                continue
             if not original_line:
-                # 处理空行
                 if current_paragraph:
-                    # 如果有积累的段落内容，先添加到结果中
                     converted_lines.append(' '.join(current_paragraph))
                     current_paragraph = []
-                
-                # 空行结束列表状态
                 if in_list:
                     in_list = False
                     list_indent_level = 0
-                
-                # 不添加空行，完全忽略它们
                 continue
             
-            # 清除Markdown符号
-            cleaned_line = self.clean_markdown_symbols(original_line)
-            
-            # 检查是否匹配任何输入规则
             matched = False
-            for level_name, pattern_key in input_rules.items():
-                if pattern_key and pattern_key in self.title_patterns:
+            # 使用排序后的规则列表
+            for level_name, pattern_key in sorted_rules:
+                if pattern_key in self.title_patterns:
                     pattern = self.title_patterns[pattern_key]['pattern']
                     match = re.match(pattern, original_line)
-                    
                     if match:
-                        # 如果有积累的段落内容，先添加到结果中
                         if current_paragraph:
                             converted_lines.append(' '.join(current_paragraph))
                             current_paragraph = []
-                        
-                        # 标题结束列表状态
                         in_list = False
                         list_indent_level = 0
-                            
-                        # 提取标题内容 - 处理不同的匹配组
+                                                # 提取标题内容 - 处理不同的匹配组
                         if len(match.groups()) == 1:
-                            # 只有标题内容，如：^####\s*(.+)$
                             title = match.group(1).strip()
                         elif len(match.groups()) == 2:
-                            # 有编号和标题内容，如：^（([一二三四五六七八九十]+)）\s*(.+)$
                             title = match.group(2).strip()
                         else:
-                            title = match.group(-1).strip()  # 取最后一个组
-                        
-                        # 清理已有的标题编号和Markdown符号
-                        clean_title = self.clean_existing_title_numbers(title)
-                        clean_title = self.clean_markdown_symbols(clean_title)
-                        
-                        # 确定级别数字
+                            title = match.group(-1).strip()
+                        # 先去Markdown符号，再去编号
+                        clean_title = self.clean_markdown_symbols(title)
+                        clean_title = self.clean_existing_title_numbers(clean_title)
                         level_num = int(level_name.replace('level', ''))
-                        
-                        # 生成新的格式化标题
                         converted_title = self.get_formatted_title(level_num, clean_title, output_formats)
                         converted_lines.append(converted_title)
                         last_line_was_title = True
@@ -293,46 +254,31 @@ class MarkdownConverter:
                         break
             
             if not matched:
-                # 检查是否是列表项
+                cleaned_line = self.clean_markdown_symbols(original_line)
                 list_match = re.match(r'^([-*+]|\d+\.|[a-zA-Z]\.)\s+', original_line)
                 if list_match:
-                    # 如果有积累的段落内容，先添加到结果中
                     if current_paragraph:
                         converted_lines.append(' '.join(current_paragraph))
                         current_paragraph = []
-                    
-                    # 设置列表状态
                     in_list = True
                     last_line_was_title = False
-                    
-                    # 列表项单独成行
                     converted_lines.append(cleaned_line)
                 elif in_list and original_line.startswith('  '):
-                    # 这是列表项的子项或续行
-                    # 如果前一行是列表项，这行是缩进的，则作为列表项的一部分
                     if converted_lines:
-                        # 将这行添加到前一个列表项
                         converted_lines[-1] = converted_lines[-1] + ' ' + cleaned_line
                     last_line_was_title = False
                 else:
-                    # 普通文本行，累积到当前段落
-                    # 如果是段落的第一行，或者前面有内容但不是列表项
                     if not in_list:
                         current_paragraph.append(cleaned_line)
                     else:
-                        # 列表状态下的非缩进行，可能是新段落
                         in_list = False
                         current_paragraph.append(cleaned_line)
                     last_line_was_title = False
         
-        # 处理最后一个段落（如果有）
         if current_paragraph:
             converted_lines.append(' '.join(current_paragraph))
         
-        # 去除所有空行
         result_lines = [line for line in converted_lines if line.strip()]
-        
-        # 最终结果
         return '\n'.join(result_lines)
         
     def _is_title_line(self, line):
@@ -355,10 +301,58 @@ class MarkdownConverterGUI:
         if not os.path.exists(self.config_dir):
             os.makedirs(self.config_dir)
         
+        # 设置跨平台字体
+        self.setup_fonts()
+        
         self.setup_ui()
         
         # 加载配置（如果存在）
         self.load_config()
+    
+    def setup_fonts(self):
+        """设置跨平台字体"""
+        system = platform.system()
+        
+        # 默认字体
+        self.default_font = "TkDefaultFont"
+        self.title_font = "TkDefaultFont"
+        self.text_font = "TkFixedFont"
+        self.button_font = "TkDefaultFont"
+        
+        # 根据系统设置字体
+        if system == "Windows":
+            # Windows系统优先使用微软雅黑
+            self.default_font = "Microsoft YaHei UI"
+            self.title_font = "Microsoft YaHei UI"
+            self.text_font = "Microsoft YaHei UI"
+            self.button_font = "Microsoft YaHei UI"
+        elif system == "Darwin":  # macOS
+            # macOS系统使用系统默认字体
+            self.default_font = "PingFang SC"
+            self.title_font = "PingFang SC"
+            self.text_font = "PingFang SC"
+            self.button_font = "PingFang SC"
+        elif system == "Linux":
+            # Linux系统尝试使用文泉驿或Noto Sans
+            self.default_font = "Noto Sans CJK SC"
+            self.title_font = "Noto Sans CJK SC"
+            self.text_font = "Noto Sans Mono CJK SC"
+            self.button_font = "Noto Sans CJK SC"
+        
+        # 检查字体是否可用
+        try:
+            available_fonts = list(font.families())
+            
+            if self.default_font not in available_fonts:
+                self.default_font = "TkDefaultFont"
+            if self.text_font not in available_fonts:
+                self.text_font = "TkFixedFont"
+        except Exception:
+            # 如果获取字体列表失败，使用默认字体
+            self.default_font = "TkDefaultFont"
+            self.title_font = "TkDefaultFont"
+            self.text_font = "TkFixedFont"
+            self.button_font = "TkDefaultFont"
         
     def setup_ui(self):
         self.root.title("Markdown中文格式转换器 - 用户友好版")
@@ -377,7 +371,7 @@ class MarkdownConverterGUI:
         title_label = tk.Label(
             title_frame, 
             text="📝 Markdown中文格式转换器 - 用户友好版", 
-            font=('微软雅黑', 18, 'bold'),
+            font=(self.title_font, 18, 'bold'),
             fg='white',
             bg='#2c3e50'
         )
@@ -414,7 +408,7 @@ class MarkdownConverterGUI:
             anchor='w',
             bg='#ecf0f1',
             fg='#2c3e50',
-            font=('微软雅黑', 9)
+            font=(self.default_font, 9)
         )
         status_bar.pack(side='bottom', fill='x')
         
@@ -441,7 +435,7 @@ class MarkdownConverterGUI:
         left_frame = tk.LabelFrame(
             content_frame, 
             text="📄 输入区域", 
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=10,
@@ -453,7 +447,7 @@ class MarkdownConverterGUI:
         self.input_text = scrolledtext.ScrolledText(
             left_frame,
             wrap=tk.WORD,
-            font=('Consolas', 11),
+            font=(self.text_font, 11),
             bg='#fafafa',
             fg='#333333',
             insertbackground='#2c3e50',
@@ -511,7 +505,7 @@ class MarkdownConverterGUI:
         right_frame = tk.LabelFrame(
             content_frame, 
             text="✨ 转换结果", 
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=10,
@@ -529,7 +523,7 @@ class MarkdownConverterGUI:
             command=self.copy_selected,
             bg='#3498db',
             fg='black',
-            font=('微软雅黑', 10, 'bold'),
+            font=(self.button_font, 10, 'bold'),
             relief='flat',
             padx=15,
             pady=5,
@@ -543,7 +537,7 @@ class MarkdownConverterGUI:
             command=self.copy_all,
             bg='#27ae60',
             fg='black',
-            font=('微软雅黑', 10, 'bold'),
+            font=(self.button_font, 10, 'bold'),
             relief='flat',
             padx=15,
             pady=5,
@@ -555,7 +549,7 @@ class MarkdownConverterGUI:
         self.output_text = scrolledtext.ScrolledText(
             right_frame,
             wrap=tk.WORD,
-            font=('微软雅黑', 11),
+            font=(self.text_font, 11),
             bg='#f8f9fa',
             fg='#333333',
             insertbackground='#2c3e50',
@@ -594,7 +588,7 @@ class MarkdownConverterGUI:
         input_frame = tk.LabelFrame(
             parent,
             text="📥 输入格式设置（当前文本的标题是什么样子的）",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -606,7 +600,7 @@ class MarkdownConverterGUI:
         output_frame = tk.LabelFrame(
             parent,
             text="📤 输出格式设置（希望转换后的标题是什么样子的）",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -618,7 +612,7 @@ class MarkdownConverterGUI:
         preset_frame = tk.LabelFrame(
             parent,
             text="🚀 快速预设",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -640,7 +634,7 @@ class MarkdownConverterGUI:
             command=self.save_config,
             bg='#2ecc71',
             fg='black',
-            font=('微软雅黑', 11, 'bold'),
+            font=(self.button_font, 11, 'bold'),
             padx=20,
             pady=10,
             relief='flat',
@@ -652,7 +646,7 @@ class MarkdownConverterGUI:
         preview_frame = tk.LabelFrame(
             parent,
             text="👁️ 实时预览对比",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -664,7 +658,7 @@ class MarkdownConverterGUI:
         preview_info = tk.Label(
             preview_frame,
             text="根据你的设置，以下是转换效果对比预览：",
-            font=('微软雅黑', 10),
+            font=(self.default_font, 10),
             bg='white',
             fg='#2c3e50'
         )
@@ -682,7 +676,7 @@ class MarkdownConverterGUI:
         before_frame = tk.LabelFrame(
             preview_container,
             text="📄 转换前",
-            font=('微软雅黑', 11, 'bold'),
+            font=(self.default_font, 11, 'bold'),
             bg='white',
             fg='#e74c3c',
             padx=10,
@@ -694,7 +688,7 @@ class MarkdownConverterGUI:
         self.preview_before_text = scrolledtext.ScrolledText(
             before_frame,
             wrap=tk.WORD,
-            font=('微软雅黑', 10),
+            font=(self.text_font, 10),  # 修改为Windows通用字体
             bg='#fff3f3',
             fg='#333333',
             height=10,  # 进一步减小高度
@@ -706,10 +700,10 @@ class MarkdownConverterGUI:
         after_frame = tk.LabelFrame(
             preview_container,
             text="✨ 转换后",
-            font=('微软雅黑', 11, 'bold'),
+            font=(self.default_font, 11, 'bold'),
             bg='white',
             fg='#27ae60',
-            padx=10,
+                padx=10,
             pady=10
         )
         # after_frame.pack(side='left', fill='both', expand=True, padx=(2, 0))
@@ -718,7 +712,7 @@ class MarkdownConverterGUI:
         self.preview_after_text = scrolledtext.ScrolledText(
             after_frame,
             wrap=tk.WORD,
-            font=('微软雅黑', 10),
+            font=(self.text_font, 10),  # 修改为Windows通用字体
             bg='#f3fff3',
             fg='#333333',
             height=10,  # 进一步减小高度
@@ -730,7 +724,7 @@ class MarkdownConverterGUI:
         reference_frame = tk.LabelFrame(
             parent,
             text="📋 格式对照表",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -758,7 +752,7 @@ class MarkdownConverterGUI:
         reference_label = tk.Label(
             reference_frame,
             text=reference_text,
-            font=('Consolas', 10),
+            font=(self.default_font, 10),
             bg='white',
             fg='#2c3e50',
             justify='left'
@@ -859,7 +853,7 @@ class MarkdownConverterGUI:
             tk.Label(
                 level_frame,
                 text=f"{level_name}:",
-                font=('微软雅黑', 10, 'bold'),
+                font=(self.default_font, 10, 'bold'),
                 bg='white',
                 fg='#2c3e50',
                 width=10
@@ -874,7 +868,7 @@ class MarkdownConverterGUI:
                 values=[opt[0] for opt in input_options],
                 state='readonly',
                 width=20,
-                font=('微软雅黑', 10)
+                font=(self.default_font, 10)
             )
             combobox.pack(side='left', padx=(0, 10))
             
@@ -901,7 +895,7 @@ class MarkdownConverterGUI:
                 command=lambda l=level: self.preview_input_format(l),
                 bg='#f39c12',
                 fg='black',
-                font=('微软雅黑', 9),
+                font=(self.button_font, 9),
                 padx=10,
                 pady=2
             )
@@ -967,7 +961,7 @@ class MarkdownConverterGUI:
             tk.Label(
                 level_frame,
                 text=config['label'] + ":",
-                font=('微软雅黑', 10, 'bold'),
+                font=(self.default_font, 10, 'bold'),
                 bg='white',
                 fg='#2c3e50',
                 width=12
@@ -990,7 +984,7 @@ class MarkdownConverterGUI:
                 values=display_values,
                 state='readonly',
                 width=20,
-                font=('微软雅黑', 10)
+                font=(self.default_font, 10)
             )
             combobox.pack(side='left', padx=(0, 10))
             
@@ -1014,7 +1008,7 @@ class MarkdownConverterGUI:
                 command=lambda l=level: self.show_output_example(l),
                 bg='#9b59b6',
                 fg='black',
-                font=('微软雅黑', 9),
+                font=(self.button_font, 9),
                 padx=10,
                 pady=2
             )
@@ -1084,10 +1078,10 @@ class MarkdownConverterGUI:
                 text=f"🎯 {preset['name']}",
                 command=lambda p=preset: self.apply_preset(p),
                 bg='#3498db',
-                fg='black',
-                font=('微软雅黑', 11, 'bold'),
+            fg='black',
+                font=(self.button_font, 11, 'bold'),
                 padx=20,
-                pady=10,
+            pady=10,
                 width=18
             )
             btn.pack(side='left', padx=10, pady=5)
@@ -1099,7 +1093,7 @@ class MarkdownConverterGUI:
             desc_label = tk.Label(
                 desc_frame,
                 text=f"格式: {preset['description']}",
-                font=('微软雅黑', 10, 'bold'),
+                font=(self.default_font, 10, 'bold'),
                 bg='white',
                 fg='#27ae60',
                 anchor='w'
@@ -1111,7 +1105,7 @@ class MarkdownConverterGUI:
             detail_label = tk.Label(
                 desc_frame,
                 text=detail_text,
-                font=('微软雅黑', 9),
+                font=(self.default_font, 9),
                 bg='white',
                 fg='#7f8c8d',
                 anchor='w'
@@ -1221,7 +1215,7 @@ class MarkdownConverterGUI:
         quick_frame = tk.LabelFrame(
             parent,
             text="🚀 操作区域",
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.default_font, 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
@@ -1240,7 +1234,7 @@ class MarkdownConverterGUI:
             command=self.clear_all,
             bg='#95a5a6',
             fg='black',
-            font=('微软雅黑', 12, 'bold'),
+            font=(self.button_font, 12, 'bold'),
             relief='flat',
             padx=30,
             pady=10,
@@ -1253,7 +1247,7 @@ class MarkdownConverterGUI:
         tip_label = tk.Label(
             quick_frame,
             text=tip_text,
-            font=('微软雅黑', 10),
+            font=(self.default_font, 10),
             bg='white',
             fg='#e67e22'
         )
@@ -1363,10 +1357,9 @@ class MarkdownConverterGUI:
                 self.output_text.delete('1.0', tk.END)
                 self.output_text.insert('1.0', "请先在【格式规则】页面设置至少一个输入格式！")
                 return
-            
+
             # 执行转换（convert_text方法已经包含去除多余换行的逻辑）
             result = self.converter.convert_text(input_text, input_rules, output_formats)
-            
             self.output_text.delete('1.0', tk.END)
             self.output_text.insert('1.0', result)
             
@@ -1520,7 +1513,7 @@ class MarkdownConverterGUI:
         msg_label = tk.Label(
             popup,
             text=message,
-            font=('微软雅黑', 11),
+            font=(self.default_font, 11),
             bg='white',
             fg='#2c3e50',
             wraplength=380
@@ -1533,7 +1526,7 @@ class MarkdownConverterGUI:
         time_label = tk.Label(
             popup,
             textvariable=time_var,
-            font=('微软雅黑', 9),
+            font=(self.default_font, 9),
             bg='white',
             fg='#7f8c8d'
         )
