@@ -59,6 +59,7 @@ class MarkdownConverter:
             r'^[#*\s]*[一二三四五六七八九十]+\s+',                # 中文数字+空格
             r'^[#*\s]*[0-9]+\s+',                               # 数字+空格
             r'^[#*\s]*[A-Za-z]+\s+',                            # 字母+空格
+            r'^#+\s*',  # 清理开头的 # 符号
         ]
         for pattern in patterns:
             title = re.sub(pattern, '', title)
@@ -304,10 +305,14 @@ class MarkdownConverterGUI:
         # 设置跨平台字体
         self.setup_fonts()
         
+        # 设置UI
         self.setup_ui()
         
         # 加载配置（如果存在）
         self.load_config()
+        
+        # 保存加载后的规则状态作为初始状态
+        self.save_current_rules_state()
     
     def setup_fonts(self):
         """设置跨平台字体"""
@@ -355,31 +360,35 @@ class MarkdownConverterGUI:
             self.button_font = "TkDefaultFont"
         
     def setup_ui(self):
-        self.root.title("Markdown中文格式转换器 - 用户友好版")
-        self.root.geometry("1400x1000")  # 增加窗口宽度
+        self.root.title("Markdown中文格式转换器")
+        
+        # 获取屏幕尺寸
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # 计算窗口尺寸 - 宽度为屏幕宽度的80%，高度为屏幕高度的80%
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
+        
+        # 确保窗口不会太小
+        window_width = max(window_width, 1000)
+        window_height = max(window_height, 700)
+        
+        # 计算窗口位置使其居中
+        x_position = (screen_width - window_width) // 2
+        y_position = (screen_height - window_height) // 2
+        
+        # 设置窗口大小和位置
+        self.root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
         self.root.configure(bg='#f0f0f0')
         
         # 设置样式
         style = ttk.Style()
         style.theme_use('clam')
         
-        # 主标题
-        title_frame = tk.Frame(self.root, bg='#2c3e50', height=80)
-        title_frame.pack(fill='x', pady=(0, 10))
-        title_frame.pack_propagate(False)
-        
-        title_label = tk.Label(
-            title_frame, 
-            text="📝 Markdown中文格式转换器 - 用户友好版", 
-            font=(self.title_font, 18, 'bold'),
-            fg='white',
-            bg='#2c3e50'
-        )
-        title_label.pack(expand=True)
-        
         # 主内容框架
         main_frame = tk.Frame(self.root, bg='#f0f0f0')
-        main_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
         
         # 创建Notebook（标签页）
         self.notebook = ttk.Notebook(main_frame)
@@ -419,9 +428,6 @@ class MarkdownConverterGUI:
         # 绑定标签页切换事件
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
         
-        # 保存初始规则状态
-        self.save_current_rules_state()
-        
         # 绑定窗口关闭事件，保存配置
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
     
@@ -439,15 +445,49 @@ class MarkdownConverterGUI:
             bg='white',
             fg='#2c3e50',
             padx=10,
-            pady=10
+            pady=5  # 减小内边距
         )
         left_frame.pack(side='left', fill='both', expand=True, padx=(0, 10))
+        
+        # 输入区域按钮框架 - 移到文本框前面
+        input_button_frame = tk.Frame(left_frame, bg='white')
+        input_button_frame.pack(fill='x', pady=(0, 5))  # 减小内边距
+        
+        # 清空按钮
+        self.clear_btn = tk.Button(
+            input_button_frame,
+            text="🗑️ 清空内容",
+            command=self.clear_all,
+            bg='#95a5a6',
+            fg='black',
+            font=(self.button_font, 9, 'bold'),  # 减小字体
+            relief='flat',
+            padx=10,
+            pady=3,  # 减小内边距
+            cursor='hand2'
+        )
+        self.clear_btn.pack(side='left', padx=(0, 10))
+        
+        # 刷新按钮
+        self.refresh_btn = tk.Button(
+            input_button_frame,
+            text="🔄 刷新",
+            command=self.auto_convert,
+            bg='#3498db',
+            fg='black',
+            font=(self.button_font, 9, 'bold'),  # 减小字体
+            relief='flat',
+            padx=10,
+            pady=3,  # 减小内边距
+            cursor='hand2'
+        )
+        self.refresh_btn.pack(side='left')
         
         # 输入文本框
         self.input_text = scrolledtext.ScrolledText(
             left_frame,
             wrap=tk.WORD,
-            font=(self.text_font, 11),
+            font=(self.text_font, 10),  # 减小字体
             bg='#fafafa',
             fg='#333333',
             insertbackground='#2c3e50',
@@ -460,41 +500,7 @@ class MarkdownConverterGUI:
         self.input_text.bind("<KeyRelease>", self.auto_convert)
         
         # 添加示例文本
-        example_text = """近年来，国家针对大功率充电桩的发展出台了一系列政策文件，以推动新能源汽车充电基础设施的高质量建设。以下是主要的相关政策文件：
-
-### 1. **《关于促进大功率充电设施科学规划建设的通知》（发改办能源〔2025〕632号）**
-- **发布机构**：国家发展改革委办公厅、国家能源局综合司、工业和信息化部办公厅、交通运输部办公厅
-- **主要内容**：
-  - 提出到2027年底，力争全国大功率充电设施（单枪功率≥250kW）超过10万台。
-  - 要求新能源车企自建的大功率充电设施网络原则上应无差别开放。
-  - 优先改造高速公路服务区利用率超40%的充电设施。
-  - 鼓励智能有序充电、光伏/储能配套建设，支持参与电力市场交易。
-  - 推动高压碳化硅模块等核心器件国产化，探索兆瓦级充电技术试点。
-
-### 2. **《关于加强新能源汽车与电网融合互动的实施意见》（2024年）**
-- **发布机构**：国家发展改革委等四部门
-- **主要内容**：
-  - 提出到2025年全面实施充电峰谷电价机制，推动新能源汽车参与电网调峰。
-  - 支持智能有序充电和车网互动（V2G），鼓励充电设施接入新型负荷管理系统。
-
-### 3. **《关于创新和完善促进绿色发展价格机制的意见》**
-- **发布机构**：国家发展改革委
-- **主要内容**：
-  - 延长电动汽车集中式充换电设施免收容量电费政策至2025年，降低运营成本。
-
-### 4. **地方配套政策（示例）**
-- **北京市《2025年第二批先进充电设施示范项目通知》**：
-  - 对智能有序充电、V2G、大功率充电设施给予工程投资30%的补助。
-- **山西孝县《充换电设施补短板试点奖补资金使用方案》**：
-  - 对120kW及以上公共充电桩按25元/kW补贴，V2G、液冷超充等新技术按50元/kW补贴。
-
-### **政策核心目标**
-- **技术升级**：推动高压充电、兆瓦级充电技术研发。
-- **标准统一**：完善车桩接口标准，促进互取互通。
-- **电网协同**：通过智能调度降低充电负荷冲击，提升新能源消纳能力。
-- **市场开放**：打破车企充电桩牌照壁垒，提高资源利用率。
-
-如需具体文件原文，可参考国家发改委或地方政府的官方发布渠道。"""
+        example_text = """"""
         
         self.input_text.insert('1.0', example_text)
         
@@ -509,13 +515,13 @@ class MarkdownConverterGUI:
             bg='white',
             fg='#2c3e50',
             padx=10,
-            pady=10
+            pady=5  # 减小内边距
         )
         right_frame.pack(side='right', fill='both', expand=True)
         
-        # 复制按钮框架
+        # 输出区域复制按钮框架
         copy_frame = tk.Frame(right_frame, bg='white')
-        copy_frame.pack(fill='x', pady=(0, 10))
+        copy_frame.pack(fill='x', pady=(0, 5))  # 减小内边距
         
         self.copy_selected_btn = tk.Button(
             copy_frame,
@@ -523,10 +529,10 @@ class MarkdownConverterGUI:
             command=self.copy_selected,
             bg='#3498db',
             fg='black',
-            font=(self.button_font, 10, 'bold'),
+            font=(self.button_font, 9, 'bold'),  # 减小字体
             relief='flat',
-            padx=15,
-            pady=5,
+            padx=10,
+            pady=3,  # 减小内边距
             cursor='hand2'
         )
         self.copy_selected_btn.pack(side='left', padx=(0, 10))
@@ -537,10 +543,10 @@ class MarkdownConverterGUI:
             command=self.copy_all,
             bg='#27ae60',
             fg='black',
-            font=(self.button_font, 10, 'bold'),
+            font=(self.button_font, 9, 'bold'),  # 减小字体
             relief='flat',
-            padx=15,
-            pady=5,
+            padx=10,
+            pady=3,  # 减小内边距
             cursor='hand2'
         )
         self.copy_all_btn.pack(side='left')
@@ -549,7 +555,7 @@ class MarkdownConverterGUI:
         self.output_text = scrolledtext.ScrolledText(
             right_frame,
             wrap=tk.WORD,
-            font=(self.text_font, 11),
+            font=(self.text_font, 10),  # 减小字体
             bg='#f8f9fa',
             fg='#333333',
             insertbackground='#2c3e50',
@@ -559,8 +565,8 @@ class MarkdownConverterGUI:
         )
         self.output_text.pack(fill='both', expand=True)
         
-        # 格式设置面板
-        self.setup_format_settings(parent)
+        # 设置按钮悬停效果
+        self.setup_hover_effects()
     
     def setup_rules_page(self, parent):
         """设置格式规则页面"""
@@ -627,38 +633,24 @@ class MarkdownConverterGUI:
     
     def setup_right_preview_content(self, parent):
         """设置右侧预览内容 - 改为左右对比"""
-        # 添加保存配置按钮
-        save_config_btn = tk.Button(
-            parent,
-            text="💾 保存当前配置",
-            command=self.save_config,
-            bg='#2ecc71',
-            fg='black',
-            font=(self.button_font, 11, 'bold'),
-            padx=20,
-            pady=10,
-            relief='flat',
-            cursor='hand2'
-        )
-        save_config_btn.pack(fill='x', pady=(0, 10))
         
-        # 实时预览区域
+        # 实时预览区域 - 填满整个右侧区域
         preview_frame = tk.LabelFrame(
             parent,
             text="👁️ 实时预览对比",
-            font=(self.default_font, 12, 'bold'),
+            font=('微软雅黑', 12, 'bold'),
             bg='white',
             fg='#2c3e50',
             padx=15,
             pady=15
         )
-        preview_frame.pack(fill='both', expand=False, pady=0)
+        preview_frame.pack(fill='both', expand=True, pady=0)
         
         # 预览说明
         preview_info = tk.Label(
             preview_frame,
             text="根据你的设置，以下是转换效果对比预览：",
-            font=(self.default_font, 10),
+            font=('微软雅黑', 10),
             bg='white',
             fg='#2c3e50'
         )
@@ -671,27 +663,26 @@ class MarkdownConverterGUI:
         # 添加这两行来配置等分
         preview_container.grid_columnconfigure(0, weight=1)
         preview_container.grid_columnconfigure(1, weight=1)
+        preview_container.grid_rowconfigure(0, weight=1)
 
         # 左侧：转换前
         before_frame = tk.LabelFrame(
             preview_container,
             text="📄 转换前",
-            font=(self.default_font, 11, 'bold'),
+            font=('微软雅黑', 11, 'bold'),
             bg='white',
             fg='#e74c3c',
             padx=10,
             pady=10
         )
-        # before_frame.pack(side='left', fill='both', expand=True, padx=(0, 2))
         before_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
         
         self.preview_before_text = scrolledtext.ScrolledText(
             before_frame,
             wrap=tk.WORD,
-            font=(self.text_font, 10),  # 修改为Windows通用字体
+            font=('微软雅黑', 10),
             bg='#fff3f3',
             fg='#333333',
-            height=10,  # 进一步减小高度
             state='normal'
         )
         self.preview_before_text.pack(fill='both', expand=True)
@@ -700,64 +691,23 @@ class MarkdownConverterGUI:
         after_frame = tk.LabelFrame(
             preview_container,
             text="✨ 转换后",
-            font=(self.default_font, 11, 'bold'),
+            font=('微软雅黑', 11, 'bold'),
             bg='white',
             fg='#27ae60',
-                padx=10,
+            padx=10,
             pady=10
         )
-        # after_frame.pack(side='left', fill='both', expand=True, padx=(2, 0))
         after_frame.grid(row=0, column=1, sticky='nsew', padx=(2, 0))
         
         self.preview_after_text = scrolledtext.ScrolledText(
             after_frame,
             wrap=tk.WORD,
-            font=(self.text_font, 10),  # 修改为Windows通用字体
+            font=('微软雅黑', 10),
             bg='#f3fff3',
             fg='#333333',
-            height=10,  # 进一步减小高度
             state='normal'
         )
         self.preview_after_text.pack(fill='both', expand=True)
-        
-        # 格式对照表区域
-        reference_frame = tk.LabelFrame(
-            parent,
-            text="📋 格式对照表",
-            font=(self.default_font, 12, 'bold'),
-            bg='white',
-            fg='#2c3e50',
-            padx=15,
-            pady=10
-        )
-        reference_frame.pack(fill='x', pady=(10, 0))
-        
-        # 对照表内容
-        reference_text = """常用格式对照：
-
-输入格式示例           →    输出格式示例
-─────────────────────────────────────
-（一）项目概述         →    一、项目概述
-（二）实施方案         →    二、实施方案
-
-1、主要内容           →    （一）主要内容  
-2、具体措施           →    （二）具体措施
-
-- 重点工作            →    1. 重点工作
-- 关键环节            →    2. 关键环节
-
-* 详细说明            →    (1)详细说明
-* 注意事项            →    (2)注意事项"""
-        
-        reference_label = tk.Label(
-            reference_frame,
-            text=reference_text,
-            font=(self.default_font, 10),
-            bg='white',
-            fg='#2c3e50',
-            justify='left'
-        )
-        reference_label.pack(anchor='w')
         
         # 初始化预览
         self.update_preview()
@@ -770,24 +720,45 @@ class MarkdownConverterGUI:
             output_formats = self.get_output_formats()
             
             # 示例文本
-            sample_text = """近年来，国家针对大功率充电桩的发展出台了一系列政策文件，以推动新能源汽车充电基础设施的高质量建设。以下是主要的相关政策文件：
+            sample_text = """以下是常用标题格式的示例文档，可以测试不同格式的转换效果：
 
-### 1. **《关于促进大功率充电设施科学规划建设的通知》（发改办能源〔2025〕632号）**
-- **发布机构**：国家发展改革委办公厅、国家能源局综合司、工业和信息化部办公厅、交通运输部办公厅
-- **主要内容**：
-  - 提出到2027年底，力争全国大功率充电设施（单枪功率≥250kW）超过10万台。
-  - 要求新能源车企自建的大功率充电设施网络原则上应无差别开放。
-  - 优先改造高速公路服务区利用率超40%的充电设施。
-  - 鼓励智能有序充电、光伏/储能配套建设，支持参与电力市场交易。
-  - 推动高压碳化硅模块等核心器件国产化，探索兆瓦级充电技术试点。
+# 一级标题示例（# 开头）
+## 二级标题示例（## 开头）
+### 三级标题示例（### 开头）
+#### 四级标题示例（#### 开头）
 
-### 2. **《关于加强新能源汽车与电网融合互动的实施意见》（2024年）**
-- **发布机构**：国家发展改革委等四部门
-- **主要内容**：
-  - 提出到2025年全面实施充电峰谷电价机制，推动新能源汽车参与电网调峰。
-  - 支持智能有序充电和车网互动（V2G），鼓励充电设施接入新型负荷管理系统。
+（一）中文数字括号标题示例
+（二）第二个中文括号标题
+（三）第三个中文括号标题
 
-如需具体文件原文，可参考国家发改委或地方政府的官方发布渠道。"""
+一、中文数字顿号标题示例
+二、第二个中文顿号标题
+三、第三个中文顿号标题
+
+(1) 阿拉伯数字括号标题示例
+(2) 第二个数字括号标题
+(3) 第三个数字括号标题
+
+1、阿拉伯数字顿号标题示例
+2、第二个数字顿号标题
+3、第三个数字顿号标题
+1. 阿拉伯数字点号标题示例
+2. 第二个数字点号标题
+3. 第三个数字点号标题
+
+- 短横线列表标题示例
+- 第二个短横线标题
+* 星号列表标题示例
+* 第二个星号标题
+
+### 1. **混合格式标题示例（Markdown + 数字 + 粗体）**
+### 2. **《关于促进大功率充电设施科学规划建设的通知》（发改办能源〔2025〕632号）**
+
+**发布机构**：国家发展改革委办公厅、国家能源局综合司
+**主要内容**：提出到2027年底，力争全国大功率充电设施超过10万台
+
+这是普通文本段落，不会被识别为标题格式。
+以上示例涵盖了所有支持的标题格式，你可以通过设置不同的输入输出规则来测试转换效果。"""
             
             # 更新转换前的内容
             self.preview_before_text.delete('1.0', tk.END)
@@ -795,10 +766,65 @@ class MarkdownConverterGUI:
             
             # 更新转换后的内容
             if input_rules:
+               
+                # 先找出所有会被转换的原始标题内容
+                original_lines = sample_text.split('\n')
+                converted_titles = set()  # 存储会被转换的标题的清理后内容
+                
+                for original_line in original_lines:
+                    if not original_line.strip():
+                        continue
+                        
+                    for level_name, pattern_key in input_rules.items():
+                        if pattern_key and pattern_key in self.converter.title_patterns:
+                            pattern = self.converter.title_patterns[pattern_key]['pattern']
+                            match = re.match(pattern, original_line)
+                            if match:
+                                # 提取并清理标题内容
+                                if len(match.groups()) == 1:
+                                    title = match.group(1).strip()
+                                elif len(match.groups()) == 2:
+                                    title = match.group(2).strip()
+                                else:
+                                    title = match.group(-1).strip()
+                                
+                                clean_title = self.converter.clean_markdown_symbols(title)
+                                clean_title = self.converter.clean_existing_title_numbers(clean_title)
+                                converted_titles.add(clean_title)
+                                break
+                
                 # 进行转换
                 result = self.converter.convert_text(sample_text, input_rules, output_formats)
+                
+                # 清空转换后的文本框
                 self.preview_after_text.delete('1.0', tk.END)
+                
+                # 配置文本标签样式
+                self.preview_after_text.tag_configure("modified", background="#ffffcc", foreground="#d35400", font=('微软雅黑', 10, 'bold'))
+                self.preview_after_text.tag_configure("normal", background="#f3fff3", foreground="#333333")
+                
+                # 先插入所有文本
                 self.preview_after_text.insert('1.0', result)
+                
+                # 检查转换后的每一行
+                result_lines = result.split('\n')
+                for i, line in enumerate(result_lines):
+                    line_start = f"{i+1}.0"
+                    line_end = f"{i+1}.end"
+                    
+                    is_modified = False
+                    if line.strip():
+                        # 检查这行是否包含被转换的标题内容
+                        for converted_title in converted_titles:
+                            if converted_title and converted_title in line:
+                                is_modified = True
+                                break
+                    
+                    # 应用样式标签
+                    if is_modified:
+                        self.preview_after_text.tag_add("modified", line_start, line_end)
+                    else:
+                        self.preview_after_text.tag_add("normal", line_start, line_end)
             else:
                 self.preview_after_text.delete('1.0', tk.END)
                 self.preview_after_text.insert('1.0', "请先设置输入格式，然后点击【更新预览】查看转换效果")
@@ -901,10 +927,7 @@ class MarkdownConverterGUI:
             )
             preview_btn.pack(side='left', padx=5)
         
-        # 设置完所有默认值后保存初始状态
-        if not self.rules_initialized:
-            self.root.after(100, self.save_current_rules_state)
-            self.rules_initialized = True
+        # 不再需要在这里保存初始状态，因为我们在__init__中已经处理了
     
     def setup_output_format_selectors(self, parent):
         """设置输出格式选择器"""
@@ -1027,10 +1050,10 @@ class MarkdownConverterGUI:
                     'level4': '* 标题'
                 },
                 'output': {
-                    'level1': '一、二、三、',
-                    'level2': '（一）（二）（三）',
-                    'level3': '1. 2. 3.',
-                    'level4': '(1)(2)(3)'
+                    'level1': '一、标题',
+                    'level2': '（一）标题',
+                    'level3': '1. 标题',
+                    'level4': '(1)标题'
                 }
             },
             {
@@ -1043,10 +1066,10 @@ class MarkdownConverterGUI:
                     'level4': '# 标题'
                 },
                 'output': {
-                    'level1': '一、二、三、',
-                    'level2': '（一）（二）（三）',
-                    'level3': '1. 2. 3.',
-                    'level4': '(1)(2)(3)'
+                    'level1': '一、标题',
+                    'level2': '（一）标题',
+                    'level3': '1. 标题',
+                    'level4': '(1)标题'
                 }
             },
             {
@@ -1059,10 +1082,10 @@ class MarkdownConverterGUI:
                     'level4': '1. 标题'
                 },
                 'output': {
-                    'level1': '1、2、3、',
-                    'level2': '(1)(2)(3)',
-                    'level3': '1. 2. 3.',
-                    'level4': '(a)(b)(c)'
+                    'level1': '1、标题',
+                    'level2': '(1)标题',
+                    'level3': '1. 标题',
+                    'level4': '(a)标题'
                 }
             }
         ]
@@ -1070,47 +1093,51 @@ class MarkdownConverterGUI:
         # 创建网格布局来更好地显示预设按钮
         for i, preset in enumerate(presets):
             preset_container = tk.Frame(parent, bg='white', relief='raised', bd=1)
-            preset_container.pack(fill='x', pady=8, padx=5)
+            preset_container.pack(fill='x', pady=5, padx=5)  # 减小垂直内边距
             
             # 预设按钮
             btn = tk.Button(
                 preset_container,
-                text=f"🎯 {preset['name']}",
+                text=f"{preset['name']}",
                 command=lambda p=preset: self.apply_preset(p),
                 bg='#3498db',
-            fg='black',
-                font=(self.button_font, 11, 'bold'),
-                padx=20,
-            pady=10,
-                width=18
+                fg='black',
+                font=(self.button_font, 10, 'bold'),
+                padx=15,
+                pady=6,
+                width=6  # 进一步减小按钮宽度
             )
-            btn.pack(side='left', padx=10, pady=5)
+            btn.pack(side='left', padx=10, pady=1)
             
             # 描述区域
             desc_frame = tk.Frame(preset_container, bg='white')
-            desc_frame.pack(side='left', fill='both', expand=True, padx=10)
+            desc_frame.pack(side='left', fill='both', expand=True, padx=5)
             
-            desc_label = tk.Label(
+            # 输入格式描述 - 增加字间距
+            input_text = f"1: {preset['input']['level1']} | 2: {preset['input']['level2']} | 3: {preset['input']['level3']} | 4: {preset['input']['level4']}"
+            input_label = tk.Label(
                 desc_frame,
-                text=f"格式: {preset['description']}",
-                font=(self.default_font, 10, 'bold'),
+                text=f"输入: {input_text}",
+                font=(self.default_font, 9),  # 减小字体大小
+                bg='white',
+                fg='#e74c3c',
+                anchor='w',
+                justify='left'  # 确保左对齐
+            )
+            input_label.pack(anchor='w', pady=(2, 1))  # 添加垂直间距
+            
+            # 输出格式描述 - 增加字间距
+            output_text = f"1: {preset['output']['level1']} | 2: {preset['output']['level2']} | 3: {preset['output']['level3']} | 4: {preset['output']['level4']}"
+            output_label = tk.Label(
+                desc_frame,
+                text=f"输出: {output_text}",
+                font=(self.default_font, 9),  # 减小字体大小
                 bg='white',
                 fg='#27ae60',
-                anchor='w'
+                anchor='w',
+                justify='left'  # 确保左对齐
             )
-            desc_label.pack(anchor='w')
-            
-            # 详细说明
-            detail_text = f"输入: {' | '.join(preset['input'].values())[:50]}..."
-            detail_label = tk.Label(
-                desc_frame,
-                text=detail_text,
-                font=(self.default_font, 9),
-                bg='white',
-                fg='#7f8c8d',
-                anchor='w'
-            )
-            detail_label.pack(anchor='w')
+            output_label.pack(anchor='w', pady=(1, 2))  # 添加垂直间距
     
     def preview_input_format(self, level):
         """预览输入格式"""
@@ -1152,7 +1179,8 @@ class MarkdownConverterGUI:
             
             messagebox.showinfo("输入格式预览", example_text)
         else:
-            messagebox.showwarning("警告", "未找到对应的格式信息")
+            # 显示右上角自动消失提示
+            self.show_top_right_notification("未找到对应的格式信息")
     
     def show_output_example(self, level):
         """显示输出格式示例"""
@@ -1189,7 +1217,8 @@ class MarkdownConverterGUI:
             
             messagebox.showinfo("输出格式示例", example_text)
         else:
-            messagebox.showwarning("警告", "未找到示例")
+            # 显示右上角自动消失提示
+            self.show_top_right_notification("未找到示例")
     
     def apply_preset(self, preset):
         """应用预设配置"""
@@ -1199,62 +1228,45 @@ class MarkdownConverterGUI:
                 self.input_vars[level].set(format_name)
         
         # 设置输出格式
+        output_mappings = {
+            'level1': {
+                '一、标题': '一、二、三、',
+                '1、标题': '1、2、3、',
+                'Ⅰ、标题': 'Ⅰ、Ⅱ、Ⅲ、'
+            },
+            'level2': {
+                '（一）标题': '（一）（二）（三）',
+                '(1)标题': '(1)(2)(3)',
+                '(A)标题': '(A)(B)(C)'
+            },
+            'level3': {
+                '1. 标题': '1. 2. 3.',
+                'A. 标题': 'A. B. C.',
+                '一. 标题': '一. 二. 三.'
+            },
+            'level4': {
+                '(1)标题': '(1)(2)(3)',
+                '(a)标题': '(a)(b)(c)',
+                '（一）标题': '（一）（二）（三）'
+            }
+        }
+        
         for level, format_name in preset['output'].items():
-            if level in self.output_vars:
-                self.output_vars[level].set(format_name)
+            if level in self.output_vars and level in output_mappings:
+                if format_name in output_mappings[level]:
+                    self.output_vars[level].set(output_mappings[level][format_name])
         
         # 更新预览
         if hasattr(self, 'update_preview'):
             self.update_preview()
         
+        # 保存当前配置到文件
+        self.save_config_without_message()
+        
         self.status_var.set(f"已应用预设：{preset['name']}")
         messagebox.showinfo("成功", f"已应用预设配置：{preset['name']}")
     
-    def setup_format_settings(self, parent):
-        """设置快速转换按钮"""
-        quick_frame = tk.LabelFrame(
-            parent,
-            text="🚀 操作区域",
-            font=(self.default_font, 12, 'bold'),
-            bg='white',
-            fg='#2c3e50',
-            padx=15,
-            pady=15
-        )
-        quick_frame.pack(fill='x', padx=10, pady=(20, 0))
-        
-        # 按钮框架
-        button_frame = tk.Frame(quick_frame, bg='white')
-        button_frame.pack(fill='x')
-        
-        # 清空按钮
-        self.clear_btn = tk.Button(
-            button_frame,
-            text="🗑️ 清空内容",
-            command=self.clear_all,
-            bg='#95a5a6',
-            fg='black',
-            font=(self.button_font, 12, 'bold'),
-            relief='flat',
-            padx=30,
-            pady=10,
-            cursor='hand2'
-        )
-        self.clear_btn.pack(side='left')
-        
-        # 说明文本
-        tip_text = "💡 提示：输入文本后会自动转换，请先在【格式规则】页面设置输入和输出格式"
-        tip_label = tk.Label(
-            quick_frame,
-            text=tip_text,
-            font=(self.default_font, 10),
-            bg='white',
-            fg='#e67e22'
-        )
-        tip_label.pack(pady=(10, 0), side='left', padx=(20, 0))
-        
-        # 鼠标悬停效果
-        self.setup_hover_effects()
+
     
     def setup_hover_effects(self):
         """设置按钮悬停效果"""
@@ -1271,6 +1283,10 @@ class MarkdownConverterGUI:
         # 清空按钮
         self.clear_btn.bind("<Enter>", on_enter(self.clear_btn, '#7f8c8d'))
         self.clear_btn.bind("<Leave>", on_leave(self.clear_btn, '#95a5a6'))
+        
+        # 刷新按钮
+        self.refresh_btn.bind("<Enter>", on_enter(self.refresh_btn, '#2980b9'))
+        self.refresh_btn.bind("<Leave>", on_leave(self.refresh_btn, '#3498db'))
         
         # 复制按钮
         self.copy_selected_btn.bind("<Enter>", on_enter(self.copy_selected_btn, '#2980b9'))
@@ -1313,7 +1329,8 @@ class MarkdownConverterGUI:
         input_text = self.input_text.get('1.0', tk.END).strip()
         
         if not input_text:
-            messagebox.showwarning("警告", "请先输入要转换的文本！")
+            # 显示右上角自动消失提示
+            self.show_top_right_notification("请先输入要转换的文本！")
             self.status_var.set("转换失败：输入为空")
             return
         
@@ -1323,7 +1340,8 @@ class MarkdownConverterGUI:
             
             if not input_rules:
                 warning_msg = "请先在【格式规则】页面设置至少一个输入格式！"
-                messagebox.showwarning("警告", warning_msg)
+                # 显示右上角自动消失提示
+                self.show_top_right_notification(warning_msg)
                 self.status_var.set("转换失败：未设置输入格式")
                 return
             
@@ -1380,9 +1398,11 @@ class MarkdownConverterGUI:
             self.root.clipboard_clear()
             self.root.clipboard_append(selected_text)
             self.status_var.set("已复制选中文本到剪贴板")
-            messagebox.showinfo("成功", "选中文本已复制到剪贴板！")
+            # 显示右上角自动消失提示
+            self.show_top_right_notification("选中内容已复制到剪贴板！")
         except tk.TclError:
-            messagebox.showwarning("警告", "请先选中要复制的文本！")
+            # 改为自动消失的警告提示
+            self.show_top_right_notification("请先选中要复制的文本！")
             self.status_var.set("复制失败：未选中文本")
     
     def copy_all(self):
@@ -1390,15 +1410,131 @@ class MarkdownConverterGUI:
         output_text = self.output_text.get('1.0', tk.END).strip()
         
         if not output_text:
-            messagebox.showwarning("警告", "没有可复制的内容！")
+            # 显示右上角自动消失提示
+            self.show_top_right_notification("没有可复制的内容！")
             self.status_var.set("复制失败：无内容")
             return
         
         self.root.clipboard_clear()
         self.root.clipboard_append(output_text)
         self.status_var.set("已复制全部文本到剪贴板")
-        messagebox.showinfo("成功", "全部内容已复制到剪贴板！")
-    
+        # 显示右上角自动消失提示
+        self.show_top_right_notification("全部内容已复制到剪贴板！")
+
+
+    def show_top_right_notification(self, message, duration=3000):
+        """在右上角显示自动消失的通知"""
+        notification = tk.Toplevel(self.root)
+        notification.title("")
+        notification.resizable(False, False)
+        
+        # 先隐藏窗口，避免闪烁
+        notification.withdraw()
+        
+        # 移除标题栏
+        notification.overrideredirect(True)
+        
+        # 设置样式 - 改为灰色背景
+        notification.configure(bg='#f8f9fa')
+        
+        # 创建主框架 - 减小垂直内边距
+        main_frame = tk.Frame(notification, bg='#f8f9fa', padx=20, pady=8)
+        main_frame.pack(fill='both', expand=True)
+        
+        # 消息文本 - 改为黑色文字，减小字体
+        msg_label = tk.Label(
+            main_frame,
+            text=message,
+            font=(self.default_font, 11, 'bold'),
+            bg='#f8f9fa',
+            fg='#2c3e50',
+            wraplength=300
+        )
+        msg_label.pack()
+        
+        # 添加边框 - 使用更柔和的边框颜色
+        notification.configure(relief='solid', bd=1, highlightbackground='#dee2e6')
+        
+        # 强制更新窗口以获取正确的尺寸
+        notification.update_idletasks()
+        
+        # 计算位置 - 右上角
+        width = notification.winfo_reqwidth()
+        height = notification.winfo_reqheight()
+        
+        # 获取主窗口位置和尺寸
+        main_x = self.root.winfo_x()
+        main_y = self.root.winfo_y()
+        main_width = self.root.winfo_width()
+        
+        # 计算通知窗口位置（主窗口右上角，稍微向内偏移）
+        x = main_x + main_width - width - 20
+        y = main_y + 80
+        
+        # 设置位置
+        notification.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # 创建阴影效果
+        shadow = tk.Toplevel(self.root)
+        shadow.withdraw()  # 先隐藏阴影
+        shadow.overrideredirect(True)
+        shadow.configure(bg='#adb5bd')
+        shadow.geometry(f"{width}x{height}+{x+2}+{y+2}")
+        
+        # 现在显示窗口
+        notification.deiconify()
+        shadow.deiconify()
+        
+        # 设置置顶和层次
+        notification.attributes('-topmost', True)
+        shadow.attributes('-topmost', True)
+        shadow.lower(notification)
+        
+        # 淡入动画效果
+        def fade_in():
+            for alpha in [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
+                try:
+                    notification.attributes('-alpha', alpha)
+                    shadow.attributes('-alpha', alpha * 0.2)
+                    notification.update()
+                    notification.after(30)
+                except tk.TclError:
+                    break
+        
+        # 淡出动画效果
+        def fade_out():
+            for alpha in [0.9, 0.7, 0.5, 0.3, 0.1, 0.0]:
+                try:
+                    notification.attributes('-alpha', alpha)
+                    shadow.attributes('-alpha', alpha * 0.2)
+                    notification.update()
+                    notification.after(50)
+                except tk.TclError:
+                    break
+            try:
+                notification.destroy()
+                shadow.destroy()
+            except tk.TclError:
+                pass
+        
+        # 启动淡入动画
+        notification.after(10, fade_in)
+        
+        # 设置自动消失
+        notification.after(duration - 500, fade_out)
+        
+        # 点击通知可立即关闭
+        def close_notification(event):
+            try:
+                notification.destroy()
+                shadow.destroy()
+            except tk.TclError:
+                pass
+        
+        notification.bind("<Button-1>", close_notification)
+        msg_label.bind("<Button-1>", close_notification)    
+   
+
     def clear_all(self):
         """清空所有内容"""
         result = messagebox.askyesno("确认", "确定要清空所有内容吗？")
@@ -1423,12 +1559,22 @@ class MarkdownConverterGUI:
             output_formats_changed = self._dict_changed(self.last_output_formats, current_output_formats)
             
             if input_rules_changed or output_formats_changed:
-                self.status_var.set("格式规则已更改，正在更新转换结果...")
-                # 更新保存的规则状态
-                self.last_input_rules = current_input_rules.copy()
-                self.last_output_formats = current_output_formats.copy()
+                # 询问用户是否保存当前配置
+                save_result = messagebox.askyesno("格式规则已修改", "格式规则有修改，是否保存为当前配置？")
+                if save_result:
+                    # 用户选择保存
+                    self.save_config_without_message()
+                    self.status_var.set("格式规则已更改并保存，正在更新转换结果...")
+                    # 更新保存的规则状态
+                    self.save_current_rules_state()
+                else:
+                    # 用户选择不保存，恢复之前的配置
+                    self.load_config()
+                    self.status_var.set("已恢复之前的配置，正在更新转换结果...")
+                
                 # 自动重新转换文本
                 self.root.after(100, self.auto_convert)  # 使用after确保UI更新完成后再转换
+        
         elif current_tab == "⚙️ 格式规则":
             # 切换到格式规则页面时，保存当前规则状态以便后续比较
             self.save_current_rules_state()
@@ -1460,8 +1606,8 @@ class MarkdownConverterGUI:
         # 保留此方法以兼容现有代码
         pass
     
-    def save_config(self):
-        """保存当前配置到文件"""
+    def save_config_without_message(self):
+        """保存当前配置到文件但不显示消息"""
         try:
             config = {
                 'input_rules': {},
@@ -1483,13 +1629,70 @@ class MarkdownConverterGUI:
                 json.dump(config, f, ensure_ascii=False, indent=4)
             
             self.status_var.set("配置已保存")
-            
-            # 创建自动关闭的提示窗口
-            self.show_auto_close_message("配置已保存", "配置已保存，将在下次启动时自动加载", 3000)
         except Exception as e:
             error_msg = f"保存配置失败：{str(e)}"
             messagebox.showerror("错误", error_msg)
             self.status_var.set(error_msg)
+    
+    def load_config(self):
+        """从文件加载配置"""
+        if not os.path.exists(self.config_file):
+            return
+        
+        try:
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 加载输入规则
+            if 'input_rules' in config:
+                for level, display_value in config['input_rules'].items():
+                    if level in self.input_vars and display_value:
+                        self.input_vars[level].set(display_value)
+            
+            # 加载输出格式
+            if 'output_formats' in config:
+                for level, display_value in config['output_formats'].items():
+                    if level in self.output_vars and display_value:
+                        self.output_vars[level].set(display_value)
+            
+            # 更新预览
+            self.update_preview()
+            self.status_var.set("已加载保存的配置")
+        except Exception as e:
+            error_msg = f"加载配置失败：{str(e)}"
+            self.status_var.set(error_msg)
+    
+    def on_closing(self):
+        """窗口关闭时保存配置，但不显示提示"""
+        try:
+            # 保存配置但不显示提示
+            config = {
+                'input_rules': {},
+                'output_formats': {}
+            }
+            
+            # 保存输入规则的显示值
+            for level, var in self.input_vars.items():
+                display_value = var.get()
+                config['input_rules'][level] = display_value
+            
+            # 保存输出格式的显示值
+            for level, var in self.output_vars.items():
+                display_value = var.get()
+                config['output_formats'][level] = display_value
+            
+            # 写入配置文件
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+        except Exception:
+            pass  # 如果保存失败，不阻止关闭
+        self.root.destroy()
+    
+    def save_config(self):
+        """保存当前配置到文件并显示提示"""
+        self.save_config_without_message()
+        # 创建自动关闭的提示窗口
+        self.show_auto_close_message("配置已保存", "配置已保存，将在下次启动时自动加载", 3000)
     
     def show_auto_close_message(self, title, message, duration=3000):
         """显示自动关闭的消息窗口"""
@@ -1556,60 +1759,6 @@ class MarkdownConverterGUI:
         
         # 点击任意位置关闭窗口
         popup.bind("<Button-1>", lambda e: popup.destroy())
-    
-    def load_config(self):
-        """从文件加载配置"""
-        if not os.path.exists(self.config_file):
-            return
-        
-        try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            # 加载输入规则
-            if 'input_rules' in config:
-                for level, display_value in config['input_rules'].items():
-                    if level in self.input_vars and display_value:
-                        self.input_vars[level].set(display_value)
-            
-            # 加载输出格式
-            if 'output_formats' in config:
-                for level, display_value in config['output_formats'].items():
-                    if level in self.output_vars and display_value:
-                        self.output_vars[level].set(display_value)
-            
-            # 更新预览
-            self.update_preview()
-            self.status_var.set("已加载保存的配置")
-        except Exception as e:
-            error_msg = f"加载配置失败：{str(e)}"
-            self.status_var.set(error_msg)
-    
-    def on_closing(self):
-        """窗口关闭时保存配置，但不显示提示"""
-        try:
-            # 保存配置但不显示提示
-            config = {
-                'input_rules': {},
-                'output_formats': {}
-            }
-            
-            # 保存输入规则的显示值
-            for level, var in self.input_vars.items():
-                display_value = var.get()
-                config['input_rules'][level] = display_value
-            
-            # 保存输出格式的显示值
-            for level, var in self.output_vars.items():
-                display_value = var.get()
-                config['output_formats'][level] = display_value
-            
-            # 写入配置文件
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-        except Exception:
-            pass  # 如果保存失败，不阻止关闭
-        self.root.destroy()
 
 def main():
     root = tk.Tk()
