@@ -148,7 +148,7 @@ jobs:
         path: MarkdownConverter_Windows_v1.0.zip
 
   build-mac:
-    runs-on: macos-latest
+    runs-on: macos-12
     
     steps:
     - uses: actions/checkout@v4
@@ -162,7 +162,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        brew install create-dmg
     
     - name: Build Mac app with icon
       run: |
@@ -171,105 +170,47 @@ jobs:
           --windowed \
           --name="MarkdownConverter" \
           --icon=app_icon.icns \
-          --distpath=dist \
-          --workpath=build \
-          --specpath=. \
-          --clean \
-          --exclude-module=PIL \
-          --exclude-module=matplotlib \
-          --exclude-module=numpy \
-          --exclude-module=scipy \
-          --exclude-module=pandas \
           markdown_gui_custom.py
 
     - name: Create README for Mac users
       run: |
-        cat > "dist/Mac使用说明.txt" << 'EOF'
-        Markdown中文格式转换器 v1.0 Mac版
-        =================================
-        
-        🍎 Mac安装说明：
-        
-        1. 双击打开DMG文件
-        2. 将MarkdownConverter拖拽到Applications文件夹
-        3. 在启动台找到应用并双击运行
-        
-        🔒 安全提示：
-        
-        首次运行可能会显示"无法验证开发者"：
-        1. 按住Control键点击应用图标
-        2. 选择"打开"
-        3. 在弹出对话框中点击"打开"
-        
-        或者在系统偏好设置中：
-        - 打开"安全性与隐私"
-        - 在"通用"标签页点击"仍要打开"
-        
-        📝 程序说明：
-        - 这是一个纯粹的文档格式转换工具
-        - 使用Python + Tkinter开发
-        - 不连接网络，不收集信息
-        - 包含自定义图标
-        - 兼容macOS 10.13及以上版本
-        
-        🚀 使用方法：
-        1. 启动MarkdownConverter应用
-        2. 在左侧输入要转换的文本
-        3. 在"格式规则"页面设置格式
-        4. 查看转换结果并复制
-        
-        📊 版本信息：
-        - 版本：v1.0 Mac版
-        - 编译日期：$(date '+%Y-%m-%d')
-        - 目标系统：macOS 10.13+
-        
-        如有问题，请联系开发者。
-        程序完全开源，代码可在GitHub查看。
-        EOF
+        echo "Markdown中文格式转换器 v1.0 Mac版" > "dist/Mac使用说明.txt"
+        echo "=================================" >> "dist/Mac使用说明.txt"
+        echo "" >> "dist/Mac使用说明.txt"
+        echo "🍎 Mac使用说明：" >> "dist/Mac使用说明.txt"
+        echo "1. 下载MarkdownConverter.app文件" >> "dist/Mac使用说明.txt"
+        echo "2. 双击运行（首次可能需要在安全设置中允许）" >> "dist/Mac使用说明.txt"
+        echo "3. 程序包含自定义图标" >> "dist/Mac使用说明.txt"
 
-    - name: Create DMG with custom icon
+    - name: Verify and create ZIP
       run: |
-        # 创建临时文件夹用于DMG内容
-        mkdir dmg_temp
-        cp -R dist/MarkdownConverter.app dmg_temp/
-        cp "dist/Mac使用说明.txt" dmg_temp/
+        echo "检查构建结果..."
+        ls -la dist/
         
-        # 创建带自定义图标和布局的DMG
-        create-dmg \
-          --volname "MarkdownConverter v1.0" \
-          --volicon "app_icon.icns" \
-          --background-color "#f0f0f0" \
-          --window-pos 200 120 \
-          --window-size 600 400 \
-          --icon-size 100 \
-          --icon "MarkdownConverter.app" 150 200 \
-          --icon "Mac使用说明.txt" 450 200 \
-          --hide-extension "MarkdownConverter.app" \
-          --app-drop-link 150 300 \
-          "MarkdownConverter_Mac_v1.0.dmg" \
-          "dmg_temp/"
-
-    - name: Verify Mac build
-      run: |
-        if [ -f "MarkdownConverter_Mac_v1.0.dmg" ]; then
-          SIZE=$(du -h "MarkdownConverter_Mac_v1.0.dmg" | cut -f1)
-          echo "✅ Mac DMG构建成功！"
-          echo "📊 DMG文件大小: $SIZE"
+        if [ -d "dist/MarkdownConverter.app" ]; then
+          echo "✅ Mac应用构建成功！"
+          
+          # 创建ZIP文件方便下载
+          cd dist
+          zip -r ../MarkdownConverter_Mac_v1.0.zip MarkdownConverter.app Mac使用说明.txt
+          cd ..
+          
+          echo "📦 已创建ZIP包: MarkdownConverter_Mac_v1.0.zip"
         else
-          echo "❌ Mac DMG构建失败"
+          echo "❌ Mac应用构建失败"
           exit 1
         fi
 
-    - name: Upload Mac DMG
+    - name: Upload Mac ZIP
       uses: actions/upload-artifact@v4
       with:
         name: MarkdownConverter-Mac
-        path: |
-          MarkdownConverter_Mac_v1.0.dmg
-          dist/Mac使用说明.txt
+        path: MarkdownConverter_Mac_v1.0.zip
 
     - name: Upload Mac app (standalone)
       uses: actions/upload-artifact@v4
       with:
         name: MarkdownConverter-Mac-App
-        path: dist/MarkdownConverter.app
+        path: |
+          dist/MarkdownConverter.app
+          dist/Mac使用说明.txt
