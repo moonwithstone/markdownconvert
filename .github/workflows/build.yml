@@ -1,4 +1,4 @@
-name: Build Windows Executable (Anti-Virus Optimized)
+name: Build Cross Platform with Icons
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     
     steps:
@@ -56,12 +56,13 @@ jobs:
         "@
         $versionInfo | Out-File -FilePath "version_info.txt" -Encoding UTF8
 
-    - name: Build executable with optimized parameters
+    - name: Build Windows executable with icon
       run: |
         pyinstaller `
           --onefile `
           --windowed `
           --name=MarkdownConverter `
+          --icon=app_icon.ico `
           --version-file=version_info.txt `
           --distpath=dist `
           --workpath=build `
@@ -75,11 +76,11 @@ jobs:
           --exclude-module=pandas `
           markdown_gui_custom.py
 
-    - name: Create README for users
+    - name: Create README for Windows users
       run: |
         $readme = @"
-        Markdown中文格式转换器 v1.0 优化版
-        ================================
+        Markdown中文格式转换器 v1.0 Windows版
+        ===================================
         
         🛡️ 杀毒软件误报解决方案：
         
@@ -98,6 +99,7 @@ jobs:
         - 不连接网络，不收集信息
         - 经过优化编译，大幅减少误报
         - 添加了完整的数字签名信息
+        - ✨ 包含自定义图标
         
         🚀 使用方法：
         1. 双击 MarkdownConverter.exe 启动
@@ -106,7 +108,7 @@ jobs:
         4. 查看转换结果并复制
         
         📊 版本信息：
-        - 版本：v1.0 优化版
+        - 版本：v1.0 Windows版
         - 编译日期：$(Get-Date -Format 'yyyy-MM-dd')
         - 编译器：PyInstaller（优化参数）
         - 误报率：比普通版本降低70%
@@ -114,33 +116,160 @@ jobs:
         如有问题，请联系开发者。
         程序完全开源，代码可在GitHub查看。
         "@
-        $readme | Out-File -FilePath "dist/使用说明.txt" -Encoding UTF8
+        $readme | Out-File -FilePath "dist/Windows使用说明.txt" -Encoding UTF8
 
-    - name: Verify and package
+    - name: Verify and package Windows
       run: |
         if (Test-Path "dist/MarkdownConverter.exe") {
           $size = (Get-Item "dist/MarkdownConverter.exe").Length / 1MB
-          Write-Host "✅ 构建成功！"
+          Write-Host "✅ Windows构建成功！"
           Write-Host "📊 文件大小: $([math]::Round($size, 2)) MB"
           
-          # 创建zip包
-          Compress-Archive -Path "dist/*" -DestinationPath "MarkdownConverter_Optimized_v1.0.zip"
-          Write-Host "📦 已创建分发包: MarkdownConverter_Optimized_v1.0.zip"
+          # 创建Windows zip包
+          Compress-Archive -Path "dist/*" -DestinationPath "MarkdownConverter_Windows_v1.0.zip"
+          Write-Host "📦 已创建Windows分发包: MarkdownConverter_Windows_v1.0.zip"
         } else {
-          Write-Host "❌ 构建失败"
+          Write-Host "❌ Windows构建失败"
           exit 1
         }
 
-    - name: Upload optimized executable
+    - name: Upload Windows executable
       uses: actions/upload-artifact@v4
       with:
-        name: MarkdownConverter-Optimized
+        name: MarkdownConverter-Windows
         path: |
           dist/MarkdownConverter.exe
-          dist/使用说明.txt
+          dist/Windows使用说明.txt
           
-    - name: Upload distribution package
+    - name: Upload Windows distribution package
       uses: actions/upload-artifact@v4
       with:
-        name: MarkdownConverter-Distribution-Package
-        path: MarkdownConverter_Optimized_v1.0.zip
+        name: MarkdownConverter-Windows-Package
+        path: MarkdownConverter_Windows_v1.0.zip
+
+  build-mac:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        brew install create-dmg
+    
+    - name: Build Mac app with icon
+      run: |
+        pyinstaller \
+          --onefile \
+          --windowed \
+          --name="MarkdownConverter" \
+          --icon=app_icon.icns \
+          --distpath=dist \
+          --workpath=build \
+          --specpath=. \
+          --clean \
+          --exclude-module=PIL \
+          --exclude-module=matplotlib \
+          --exclude-module=numpy \
+          --exclude-module=scipy \
+          --exclude-module=pandas \
+          markdown_gui_custom.py
+
+    - name: Create README for Mac users
+      run: |
+        cat > "dist/Mac使用说明.txt" << 'EOF'
+        Markdown中文格式转换器 v1.0 Mac版
+        =================================
+        
+        🍎 Mac安装说明：
+        
+        1. 双击打开DMG文件
+        2. 将MarkdownConverter拖拽到Applications文件夹
+        3. 在启动台找到应用并双击运行
+        
+        🔒 安全提示：
+        
+        首次运行可能会显示"无法验证开发者"：
+        1. 按住Control键点击应用图标
+        2. 选择"打开"
+        3. 在弹出对话框中点击"打开"
+        
+        或者在系统偏好设置中：
+        - 打开"安全性与隐私"
+        - 在"通用"标签页点击"仍要打开"
+        
+        📝 程序说明：
+        - 这是一个纯粹的文档格式转换工具
+        - 使用Python + Tkinter开发
+        - 不连接网络，不收集信息
+        - 包含自定义图标
+        - 兼容macOS 10.13及以上版本
+        
+        🚀 使用方法：
+        1. 启动MarkdownConverter应用
+        2. 在左侧输入要转换的文本
+        3. 在"格式规则"页面设置格式
+        4. 查看转换结果并复制
+        
+        📊 版本信息：
+        - 版本：v1.0 Mac版
+        - 编译日期：$(date '+%Y-%m-%d')
+        - 目标系统：macOS 10.13+
+        
+        如有问题，请联系开发者。
+        程序完全开源，代码可在GitHub查看。
+        EOF
+
+    - name: Create DMG with custom icon
+      run: |
+        # 创建临时文件夹用于DMG内容
+        mkdir dmg_temp
+        cp -R dist/MarkdownConverter.app dmg_temp/
+        cp "dist/Mac使用说明.txt" dmg_temp/
+        
+        # 创建带自定义图标和布局的DMG
+        create-dmg \
+          --volname "MarkdownConverter v1.0" \
+          --volicon "app_icon.icns" \
+          --background-color "#f0f0f0" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "MarkdownConverter.app" 150 200 \
+          --icon "Mac使用说明.txt" 450 200 \
+          --hide-extension "MarkdownConverter.app" \
+          --app-drop-link 150 300 \
+          "MarkdownConverter_Mac_v1.0.dmg" \
+          "dmg_temp/"
+
+    - name: Verify Mac build
+      run: |
+        if [ -f "MarkdownConverter_Mac_v1.0.dmg" ]; then
+          SIZE=$(du -h "MarkdownConverter_Mac_v1.0.dmg" | cut -f1)
+          echo "✅ Mac DMG构建成功！"
+          echo "📊 DMG文件大小: $SIZE"
+        else
+          echo "❌ Mac DMG构建失败"
+          exit 1
+        fi
+
+    - name: Upload Mac DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: MarkdownConverter-Mac
+        path: |
+          MarkdownConverter_Mac_v1.0.dmg
+          dist/Mac使用说明.txt
+
+    - name: Upload Mac app (standalone)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MarkdownConverter-Mac-App
+        path: dist/MarkdownConverter.app
